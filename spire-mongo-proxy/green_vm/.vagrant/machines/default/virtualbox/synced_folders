@@ -1,0 +1,1 @@
+{"rsync":{"/vagrant":{"type":"rsync","guestpath":"/vagrant","hostpath":"/home/dfeldman/work/spire_mongo_proxy/green_vm","disabled":false,"__vagrantfile":true,"owner":"vagrant","group":"vagrant"}}}

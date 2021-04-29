@@ -1,0 +1,32 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+  config.vm.box = "centos/8"
+  config.vm.network "private_network", ip: "172.30.1.2"
+  # OpenSSL s_client testing 
+  config.vm.network "forwarded_port", guest: 44330, host:44330 
+  # Envoy admin interface
+  config.vm.network "forwarded_port", guest: 9901, host:9901 
+  # Actual traffic to the service terminated by Envoy
+  config.vm.network "forwarded_port", guest: 20001, host:20001
+  config.vm.provision "file", source: "key.pem", destination: "key.pem"
+  config.vm.provision "file", source: "cert.pem", destination: "cert.pem"
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 2
+  end
+  config.vm.provision "file", source: "install_spire.sh", destination: "install_spire.sh"
+  config.vm.provision "file", source: "install_envoy.sh", destination: "install_envoy.sh"
+  config.vm.provision "file", source: "dummy_server.sh", destination: "dummy_server.sh"
+  config.vm.provision "file", source: "mongo_yum_file", destination: "mongodb-org-4.4.repo"
+  # This file is generated as the first step in setup_green_vm.sh. It is important
+  # that it is fresh. 
+  config.vm.provision "file", source: "../spire_bootstrap.tmp", destination: "/tmp/spire_bootstrap"
+  # Template Envoy config
+  config.vm.provision "file", source: "envoy_config.yaml.tmpl", destination: "envoy_config.yaml.tmpl"
+end

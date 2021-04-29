@@ -1,0 +1,87 @@
+node:
+  id: "mongodb"
+  cluster: "spire-tcp-example"
+admin:
+  profile_path: /tmp/envoy.prof
+  access_log_path: /var/log/envoy_admin.log
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+static_resources:
+  listeners:
+  - name: mtls-listener
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: TEMPLATE_LISTEN_PORT
+    filter_chains:
+    - transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_certificate_sds_secret_configs:
+            - name: spiffe://test.com/backend
+              sds_config:
+                resource_api_version: V3
+                api_config_source:
+                  api_type: GRPC
+                  transport_api_version: V3
+                  grpc_services:
+                    envoy_grpc:
+                      cluster_name: spire_agent
+            combined_validation_context:
+              default_validation_context:
+                match_subject_alt_names:
+                  - exact: spiffe://test.com/backend # for testing
+                  - exact: TEMPLATE_CLIENT_SPIFFE_ID
+              validation_context_sds_secret_config:
+                name: spiffe://test.com 
+                sds_config:
+                  resource_api_version: V3
+                  api_config_source:
+                    api_type: GRPC
+                    transport_api_version: V3
+                    grpc_services:
+                      envoy_grpc:
+                        cluster_name: spire_agent
+      filters:
+      - name: envoy.filters.network.tcp_proxy
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+          stat_prefix: tcp
+          cluster: local_service
+          access_log:
+          - name: file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: "/var/log/envoy.log"
+
+  clusters:
+  - name: local_service
+    connect_timeout: 1s
+    type: static
+    load_assignment:
+      cluster_name: local_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: TEMPLATE_UPSTREAM_PORT
+  - name: spire_agent
+    connect_timeout: 1s
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http2_protocol_options: {}
+    load_assignment:
+      cluster_name: spire_agent
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              pipe:
+                path: /var/run/spire/sockets/agent.sock
+

@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: spire-server-lb-service
+  namespace: spire
+spec:
+  type: LoadBalancer
+  selector:
+    app: spire-server
+  ports:
+  # Default port used by the image
+  - port: 8081

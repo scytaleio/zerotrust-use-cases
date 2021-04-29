@@ -1,0 +1,216 @@
+## These are the key settings for the chart (almost certainly needt o be changed)
+## Set to "frontend" to listen in HTTP and send out HTTPS, and "backend"
+## to listen in HTTPS and send out HTTP
+mode: frontend
+
+## This is the spiffe ID to be used for outgoing connections
+## This MUST be a valid registration entry in SPIRE or Envoy will error
+frontendSpiffeId: "spiffe://test.com/frontend"
+
+## This is the spiffe ID to be used in incoming connections
+## This MUST be a valid registration entry or Envoy will error
+backendSpiffeId: "spiffe://test.com/backend"
+
+## This is the hostname and port number to point to
+## If the mode is "frontend", we will configure Envoy to talk to this
+## address using HTTPS
+## If the mode is "backend", we will configure Envoy to talk to this
+## address using HTTP
+upstreamHost: "upstream"
+upstreamPort: "80"
+
+trustDomain: "spiffe://test.com"
+
+####### The remainder has reasonable defaults for basic usage
+
+replicaCount: 1
+
+podDisruptionBudget: |
+  maxUnavailable: 1
+
+## ref: https://pracucci.com/graceful-shutdown-of-kubernetes-pods.html
+terminationGracePeriodSeconds: 30
+
+strategy: |
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 2
+    maxUnavailable: 1
+
+image:
+  repository: envoyproxy/envoy
+  tag: v1.11.1
+  pullPolicy: IfNotPresent
+
+command:
+  - /usr/local/bin/envoy
+args:
+  - -l
+  - trace
+  - -c
+  - /config/envoy.yaml
+  - --base-id
+  - "1" # Needed to de-conflict this Envoy with Istio envoy
+
+## Args template allows you to use Chart template expressions to dynamically generate args
+# argsTemplate: |-
+#   - -c
+#   - /docker-entrypoint.sh envoy --service-node ${POD_NAME} --service-cluster {{ template "envoy.fullname" . }} -l debug -c /config/envoy.yaml
+
+## Kubernetes Service object.
+service:
+  enabled: true
+  ## Service name
+  ## Change this if you are deploying multiple copies so it is easy to identify which is which
+  name: spire-istio-envoy
+  type: ClusterIP
+  ## Ignored if the type is not LoadBalancer or if the IP is empty string
+  loadBalancerIP: ""
+  annotations: {}
+    ## AWS example for use with LoadBalancer service type.
+    # external-dns.alpha.kubernetes.io/hostname: envoy.cluster.local
+    # service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+  ports:
+    http2:
+      port: 443
+      targetPort: 8000
+      protocol: TCP
+  ## Used to whitelist certain source CIDRs
+  # loadBalancerSourceRanges:
+  # - 0.0.0.0/0
+
+ports:
+  admin:
+    containerPort: 9901
+    protocol: TCP
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+priorityClassName: ""
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+  # podAntiAffinity:
+  #   preferredDuringSchedulingIgnoredDuringExecution:
+  #     - weight: 50
+  #       podAffinityTerm:
+  #         topologyKey: failure-domain.beta.kubernetes.io/zone
+  #         labelSelector:
+  #           matchLabels:
+  #             release: envoy
+  #   requiredDuringSchedulingIgnoredDuringExecution:
+  #     - weight: 40
+  #       topologyKey: "kubernetes.io/hostname"
+  #       labelSelector:
+  #         matchLabels:
+  #           release: envoy
+
+## ref: https://github.com/envoyproxy/envoy/pull/2896
+serviceAccountName: spire-istio-envoy
+
+podAnnotations: {}
+  # prometheus.io/scrape: "true"
+  # prometheus.io/path: "/stats/prometheus"
+  # prometheus.io/port: "9901"
+
+podLabels: {}
+  # team: "developers"
+  # service: "envoy"
+
+livenessProbe:
+  tcpSocket:
+    port: 9901
+  initialDelaySeconds: 10
+  periodSeconds: 4
+  # timeoutSeconds: 5
+  # failureThreshold: 3
+  # successThreshold: 1
+
+readinessProbe:
+  tcpSocket:
+    port: 9901
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  # timeoutSeconds: 5
+  # failureThreshold: 3
+  # successThreshold: 1
+
+securityContext: {}
+
+env: {}
+
+## Create secrets out-of-band from Helm like this:
+##
+## $ kubectl create secret generic envoy --from-file=./some-secret.txt
+##
+secretMounts: {}
+  # secret:
+  #   secretName: envoy
+  #   mountPath: /secret
+  #   defaultMode: 256  # 256 in base10 == 0400 in octal
+
+files:
+  envoy.yaml: |-
+    {{ .Files.Get "envoy.yaml" | indent 4 }}
+
+## ServiceMonitor consumed by prometheus-operator
+serviceMonitor:
+  ## If the operator is installed in your cluster, set to true to create a Service Monitor Entry
+  enabled: false
+  interval: "15s"
+  targetLabels: []
+  podTargetLabels: []
+  ## Namespace in which the service monitor is created
+  # namespace: monitoring
+  # Added to the ServiceMonitor object so that prometheus-operator is able to discover it
+  ## ref: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#prometheusspec
+  additionalLabels: {}
+
+### Lifecycle Events
+lifecycle: {}
+#  preStop:
+#    exec:
+#      command:
+#      - sh
+#      - -c
+#      - "sleep 60"
+
+## PrometheusRule consumed by prometheus-operator
+prometheusRule:
+  enabled: false
+  ## Namespace in which the prometheus rule is created
+  # namespace: monitoring
+  ## Define individual alerting rules as required
+  ## ref: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#rulegroup
+  ##      https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+  groups:
+    upstream-rules:
+      enabled: true
+      rules:
+        high4xxRate:
+          enabled: true
+          alert: High4xxRate
+          expr: sum(rate(envoy_cluster_upstream_rq_xx{response_code_class="4"}[1m])) / sum(rate(envoy_cluster_upstream_rq_xx[1m])) * 100 > 1
+          for: 1m
+          labels:
+            severity: page
+          annotations:
+            summary: "4xx response rate above 1%"
+            description: "The 4xx error response rate for envoy cluster {{ $labels.envoy_cluster_name }} reported a service replication success rate of {{ $value }}% for more than 1 minute."
+  ## Added to the PrometheusRule object so that prometheus-operator is able to discover it
+  ## ref: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#prometheusspec
+  additionalLabels: {}
