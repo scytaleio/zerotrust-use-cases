@@ -4,7 +4,7 @@ This is a demo of using SPIRE and Envoy to authenticate both sides of a MongoDB 
 The client side is running in a Kind+Kubernetes cluster. The server side is running in a Vagrant VM. The scripts set up both the client and server.
 
 # Diagram
-![Arch Diagram](/imgs/arch.png "Architecture diagram").
+![Arch Diagram](/spire-mongo-proxy/imgs/arch.png "Architecture diagram").
 
 # Usage
 Run the scripts in order:
