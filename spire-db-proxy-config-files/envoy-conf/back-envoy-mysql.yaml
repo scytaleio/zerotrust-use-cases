@@ -1,0 +1,83 @@
+node:
+  id: "mysql-upstream"
+  cluster: "mysql-upstream"
+static_resources:
+  listeners:
+    - name: mysql-upstream-listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 10101
+      reuse_port: true
+      filter_chains:
+      - transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+           "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+           common_tls_context:
+                tls_certificate_sds_secret_configs:
+                  - name: spiffe://example.org/mysql/envoy-sidecar
+                    sds_config:
+                      resource_api_version: V3
+                      api_config_source:
+                        api_type: GRPC
+                        transport_api_version: V3
+                        grpc_services:
+                          envoy_grpc:
+                            cluster_name: spire_agent
+                
+        filters:
+          - name: envoy.filters.network.mysql_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.mysql_proxy.v3.MySQLProxy
+              stat_prefix: mysql        
+          - name: envoy.filters.network.tcp_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+              stat_prefix: tcp
+              cluster: local_service
+      
+  clusters:
+    # The local_service defines how to reach the container service.
+    # This definition receives traffic from the mtls-listener.
+    - name: local_service
+      connect_timeout: 1s
+      type: static
+      load_assignment:
+        cluster_name: local_service
+        endpoints:
+        - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 0.0.0.0
+                    port_value: 10306
+    - name: spire_agent
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: spire_agent
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    pipe:
+                      path: /tmp/spire/agent.sock
+
+admin:
+  access_log_path: "/dev/null"
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 10903 }
+layered_runtime:
+  layers:
+    - name: static_layer_0
+      static_layer:
+        envoy:
+          resource_limits:
+            listener:
+              example_listener_name:
+                connection_limit: 10000

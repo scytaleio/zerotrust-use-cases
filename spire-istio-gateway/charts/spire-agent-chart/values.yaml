@@ -1,0 +1,27 @@
+---
+# Default values for spire.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+apiVersion: v1
+appVersion: "0.11"
+description: SPIRE Spiffe-Helper Postgres Example
+name: spire
+version: 0.1.0
+
+# workaround since Azure doesn't support by default 10250 security port for kubelet
+azure: false
+namespace: spire
+selfSignedCA: true
+
+# SPIRE specific values
+# clustername needs to match between spire-config, k8s-workload-registrar config, and the actual cluster name
+clustername: spire-example
+# trustdomain is arbitrary but needs to match between spire-config and k8s-workload-registrar config
+trustdomain: test.com
+
+# This chart is intended to start a local SPIRE agent that talks to a remote SPIRE server. 
+# This is where we specify the address and port to talk to. 
+spireServerAddress: 0.0.0.0
+spireServerPort: 8081
+joinToken: insertJoinTokenHere

@@ -1,0 +1,7 @@
+apiVersion: getambassador.io/v2
+kind:  TCPMapping
+metadata:
+  name:  spire-grpc
+spec:
+  port: 30002
+  service: spire-server.spire:8081

@@ -1,0 +1,16 @@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: frontend-lb-admin-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: spire-istio-envoy
+  ports:
+  # Default port used by the image
+  - name: http
+    port: 9900
+    targetPort: 9901
+

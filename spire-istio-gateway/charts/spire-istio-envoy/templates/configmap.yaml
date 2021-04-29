@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "envoy.fullname" . }}
+  labels:
+    app: {{ template "envoy.name" . }}
+    chart: {{ template "envoy.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  envoy.yaml: |
+    node: # This prevents interfering with the existing Istio sidecar instance of Envoy
+      id: id_01
+      cluster: cluster_01
+    admin: # This can be used for readinessProbe/livenessProbe
+      access_log_path: /dev/stdout
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 9901
+    static_resources:
+      listeners:
+      - name: listener-sds-tls
+        address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: 8000
+        filter_chains:
+        - filters:
+          {{ if eq .Values.mode "frontend" -}}
+          # If we're operating in frontend mode, we're listening for a plain HTTP connection
+          # and initiating a connection to the "upstream" cluster over HTTPS
+          # (Istio itself will handle terminating TLS from the client)
+          # This is the configuration on the "blue" cluster in the example
+          #
+          {{ include "envoy_yaml.frontend_listener" . | indent 10 -}}
+          {{- else if eq .Values.mode "backend" -}}
+          # If we're operating in backend mode, we're listening for an HTTPS connection and 
+          # initiating a connection to the "upstream" cluster over HTTP
+          # (Istio itself will create a TLS connection)
+          # This is the configuration on the "blue" cluster in the example
+          #
+          {{ include "envoy_yaml.backend_listener" . | indent 10 -}}
+          {{ else }}
+          {{ fail "Mode must be set to frontend or backend" }}
+          {{ end }}
+      clusters:
+      - name: spire_agent
+        connect_timeout: 0.25s
+        http2_protocol_options: {}
+        hosts:
+          - pipe:
+              path: /run/spire/sockets/agent.sock
+      {{ if eq .Values.mode "frontend" }}
+      {{- include "envoy_yaml.frontend_cluster" . | indent 4 }}
+      {{ else if eq .Values.mode "backend" }}
+      {{ include "envoy_yaml.backend_cluster" . | indent 4 }}
+      {{ else }}
+      {{ fail "Mode must be set to frontend or backend" }}
+      {{ end }}

@@ -1,0 +1,31 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: backend-lb-service
+  namespace: default 
+spec:
+  type: LoadBalancer
+  selector:
+    app: spire-istio-envoy
+  ports:
+  # Default port used by the image
+  - name: http
+    port: 443
+    targetPort: 8000
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: backend-lb-admin-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: spire-istio-envoy
+  ports:
+  # Default port used by the image
+  - name: http
+    port: 9901
+    targetPort: 9901
+
+
