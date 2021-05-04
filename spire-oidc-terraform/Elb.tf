@@ -1,7 +1,7 @@
 # Create a new load balancer
 resource "aws_elb" "oidc-elb" {
   name               = var.elbName
-  availability_zones = ["us-west-1a"]
+  availability_zones = [var.availabilityZone]
   security_groups    = var.securityGroups 
 
   listener {
