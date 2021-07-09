@@ -1,0 +1,30 @@
+configMapGenerator:
+- name: backend-envoy
+  files:
+    - destination/config/envoy.yaml
+- name: backend-balance-json-data
+  files:
+    - destination/json/balances/balance_1
+    - destination/json/balances/balance_2
+- name: backend-profile-json-data
+  files:
+    - destination/json/profiles/profile_1
+    - destination/json/profiles/profile_2
+- name: backend-transactions-json-data
+  files:
+    - destination/json/transactions/transaction_1
+    - destination/json/transactions/transaction_2
+- name: frontend-envoy
+  files:
+    - source/config/envoy.yaml    
+- name: symbank-webapp-config
+  files:
+    - source/config/symbank-webapp.conf
+generatorOptions:
+  disableNameSuffixHash: true
+
+resources:
+  - destination/backend-service.yaml
+  - destination/backend-deployment.yaml
+  - source/frontend-service.yaml
+  - source/frontend-deployment.yaml
