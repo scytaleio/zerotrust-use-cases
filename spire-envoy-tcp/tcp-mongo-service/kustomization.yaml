@@ -1,0 +1,16 @@
+configMapGenerator:
+- name: mongo-envoy
+  files:
+    - mongo-server/config/envoy.yaml
+- name: client-envoy
+  files:
+    - mongo-client/config/envoy.yaml    
+generatorOptions:
+  disableNameSuffixHash: true
+
+resources:
+  - mongo-server/mongo-pvc.yaml
+  - mongo-server/mongo-service.yaml
+  - mongo-server/mongo-deployment.yaml
+  - mongo-client/mongo-client.yaml
+  - mongo-client/client-service.yaml

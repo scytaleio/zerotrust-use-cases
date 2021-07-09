@@ -1,0 +1,81 @@
+node:
+  id: "mongo-backend"
+  cluster: "demo-tcpcluster-spire"
+static_resources:
+  listeners:
+  - address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10100
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.mongo_proxy
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.mongo_proxy.v3.MongoProxy
+          stat_prefix: mongo
+      - name: envoy.filters.network.tcp_proxy
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+          stat_prefix: tcp
+          cluster: local_service
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_certificate_sds_secret_configs:
+            - name: "spiffe://envoy.spire-test.com/ns/default/sa/default/mongo-backend"
+              sds_config:
+                api_config_source:
+                  api_type: GRPC
+                  grpc_services:
+                    envoy_grpc:
+                      cluster_name: spire_agent
+                  transport_api_version: V3
+                resource_api_version: V3
+            combined_validation_context:
+              default_validation_context:
+                match_subject_alt_names:
+                  exact: "spiffe://envoy.spire-test.com/ns/default/sa/default/mongo-client"
+              validation_context_sds_secret_config:
+                name: "spiffe://envoy.spire-test.com"
+                sds_config:
+                  api_config_source:
+                    api_type: GRPC
+                    grpc_services:
+                      envoy_grpc:
+                        cluster_name: spire_agent
+                    transport_api_version: V3
+                  resource_api_version: V3
+            tls_params:
+               ecdh_curves:
+                - X25519:P-256:P-521:P-384
+  clusters:
+  - name: spire_agent
+    connect_timeout: 1s
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http2_protocol_options: {}
+    load_assignment:  
+      cluster_name: spire_agent
+      endpoints:  
+      - lb_endpoints: 
+        - endpoint: 
+            address:  
+              pipe: 
+                path: /run/spire/sockets/agent.sock
+  - name: local_service
+    connect_timeout: 1s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: local_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 27017
