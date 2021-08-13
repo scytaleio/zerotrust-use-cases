@@ -23,3 +23,13 @@ output "region" {
   value       = var.region
 }
 
+output "eks_cluster_name" {
+  description = "AWS EKS cluster name"
+  value = module.eks.cluster_id
+}
+
+output "kubeconfig_path" {
+  description = "Kubeconfig path"
+  value = var.kubeconfig_path
+}
+

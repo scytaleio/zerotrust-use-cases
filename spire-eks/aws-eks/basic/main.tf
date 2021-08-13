@@ -14,7 +14,7 @@ provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
   token                  = data.aws_eks_cluster_auth.cluster.token
-  load_config_file       = false
+  load_config_file       = true
 }
 
 data "aws_availability_zones" "available" {
@@ -112,17 +112,16 @@ module "eks" {
 }
 
 resource "time_sleep" "wait_for_cluster" {
-  create_duration = "900s"
+  create_duration = "${var.waittime_for_cluster}"
 }
 
 resource "null_resource" "aws_eks_kubeconfig" {
+  depends_on = [time_sleep.wait_for_cluster]
   provisioner "local-exec" {
-    command = "aws eks --region ${var.region} update-kubeconfig --name ${module.eks.cluster_id}"
+    command = <<EOT
+export KUBECONFIG=${var.kubeconfig_path}/${module.eks.cluster_id}
+aws eks --region ${var.region} update-kubeconfig --name ${module.eks.cluster_id}
+EOT
   }
 }
-
-resource "time_sleep" "wait_for_cluster1" {
-  create_duration = "30s"
-}
-
 

@@ -1,4 +1,3 @@
-
 resource "kubernetes_service_account" "spire_agent" {
   metadata {
     name      = "spire-agent"
@@ -44,7 +43,7 @@ resource "kubernetes_config_map" "spire_agent" {
   }
 
   data = {
-    "agent.conf" = "agent {\n  data_dir = \"/opt/spire\"\n  log_level = \"DEBUG\"\n  server_address = \"spire-server\"\n  server_port = \"8081\"\n  socket_path = \"/opt/spire/sockets/agent.sock\"\n  trust_bundle_path = \"/opt/spire/bundle/bundle.crt\"\n  trust_domain = \"envoy.spire-test.com\"\n}\n\nplugins {\n  NodeAttestor \"k8s_sat\" {\n    plugin_data {\n      # NOTE: Change this to your cluster name\n      cluster = \"demo-cluster\"\n    }\n  }\n\n  KeyManager \"memory\" {\n    plugin_data {\n    }\n  }\n\n  WorkloadAttestor \"k8s\" {\n    plugin_data {\n      # Defaults to the secure kubelet port by default.\n      # Minikube does not have a cert in the cluster CA bundle that\n      # can authenticate the kubelet cert, so skip validation.\n      skip_kubelet_verification = true\n    }\n  }\n\n  WorkloadAttestor \"unix\" {\n      plugin_data {\n      }\n  }\n}\n\nhealth_checks {\n  listener_enabled = true\n  bind_address = \"0.0.0.0\"\n  bind_port = \"8080\"\n  live_path = \"/live\"\n  ready_path = \"/ready\"\n}\n"
+    "agent.conf" = "agent {\n  data_dir = \"/opt/spire\"\n  log_level = \"DEBUG\"\n  server_address = \"spire-server\"\n  server_port = \"8081\"\n  socket_path = \"/opt/spire/sockets/agent.sock\"\n  trust_bundle_path = \"/opt/spire/bundle/bundle.crt\"\n  trust_domain = \"${var.trust_domain}\"\n}\n\nplugins {\n  NodeAttestor \"k8s_sat\" {\n    plugin_data {\n      # NOTE: Change this to your cluster name\n      cluster = \"demo-cluster\"\n    }\n  }\n\n  KeyManager \"memory\" {\n    plugin_data {\n    }\n  }\n\n  WorkloadAttestor \"k8s\" {\n    plugin_data {\n      # Defaults to the secure kubelet port by default.\n      # Minikube does not have a cert in the cluster CA bundle that\n      # can authenticate the kubelet cert, so skip validation.\n      skip_kubelet_verification = true\n    }\n  }\n\n  WorkloadAttestor \"unix\" {\n      plugin_data {\n      }\n  }\n}\n\nhealth_checks {\n  listener_enabled = true\n  bind_address = \"0.0.0.0\"\n  bind_port = \"8080\"\n  live_path = \"/live\"\n  ready_path = \"/ready\"\n}\n"
   }
 }
 
@@ -168,7 +167,8 @@ resource "null_resource" "spire_node_registration" {
   depends_on = [time_sleep.wait_30_seconds]
   provisioner "local-exec" {
     command = <<EOT
-kubectl exec -n spire spire-server-0 -- /opt/spire/bin/spire-server entry create -spiffeID spiffe://envoy.spire-test.com/ns/spire/sa/spire-agent -selector k8s_sat:cluster:demo-cluster -selector k8s_sat:agent_ns:spire -selector k8s_sat:agent_sa:spire-agent -node
+export KUBECONFIG=${var.kubeconfig}
+kubectl exec -n spire spire-server-0 -- /opt/spire/bin/spire-server entry create -spiffeID spiffe://${var.trust_domain}/ns/spire/sa/spire-agent -selector k8s_sat:cluster:demo-cluster -selector k8s_sat:agent_ns:spire -selector k8s_sat:agent_sa:spire-agent -node
 EOT
   }
 }
@@ -177,7 +177,8 @@ resource "null_resource" "spire_agent_registration" {
   depends_on = [time_sleep.wait_30_seconds]
   provisioner "local-exec" {
     command = <<EOT
-kubectl exec -n spire spire-server-0 -- /opt/spire/bin/spire-server entry create -spiffeID spiffe://envoy.spire-test.com/ns/default/sa/default -parentID spiffe://envoy.spire-test.com/ns/spire/sa/spire-agent -selector k8s:ns:default -selector k8s:sa:default
+export KUBECONFIG=${var.kubeconfig}
+kubectl exec -n spire spire-server-0 -- /opt/spire/bin/spire-server entry create -spiffeID spiffe://${var.trust_domain}/ns/default/sa/default -parentID spiffe://${var.trust_domain}/ns/spire/sa/spire-agent -selector k8s:ns:default -selector k8s:sa:default
 EOT
   }
 }

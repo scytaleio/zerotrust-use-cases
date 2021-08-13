@@ -45,3 +45,17 @@ variable "map_users" {
     }
   ]
 }
+
+variable "kubeconfig_path" {
+  description = "Kubeconfig path"
+  type = string
+  default = "~/.kube/"
+}
+
+variable "waittime_for_cluster" {
+  description = "Wait time for cluster to be up & running. Default 900s"
+  type = string
+  default = "900s"
+}
+
+
