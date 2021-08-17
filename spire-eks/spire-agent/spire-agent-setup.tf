@@ -178,7 +178,7 @@ resource "null_resource" "spire_agent_registration" {
   provisioner "local-exec" {
     command = <<EOT
 export KUBECONFIG=${var.kubeconfig}
-kubectl exec -n spire spire-server-0 -- /opt/spire/bin/spire-server entry create -spiffeID spiffe://${var.trust_domain}/ns/default/sa/default -parentID spiffe://${var.trust_domain}/ns/spire/sa/spire-agent -selector k8s:ns:default -selector k8s:sa:default
+kubectl exec -n spire spire-server-0 -- /opt/spire/bin/spire-server entry create -spiffeID spiffe://${var.trust_domain}/ns/spire/sa/spire-agent -parentID spiffe://${var.trust_domain}/ns/spire/sa/spire-agent -selector k8s:ns:spire -selector k8s:sa:spire-agent
 EOT
   }
 }
