@@ -1,70 +1,78 @@
-#create a Linux instance in AWS
-#set below env variables before terraform plan & apply
-#export AWS_ACCESS_KEY_ID="anaccesskey"
-#export AWS_SECRET_ACCESS_KEY="asecretkey"
+module "aws-eks" {
+  kubeconfig_path = "/tmp"
+  source = "../spire-eks/aws-eks/basic"
+}
+
 provider "aws" {
-        region     = var.region
+  region = "${module.aws-eks.region}"
 }
 
-# create an instance
-resource "aws_instance" "linux_instance" {
-  ami             = lookup(var.amis, var.region) 
-  subnet_id       = var.subnet 
-  security_groups = var.securityGroups 
-  key_name        = var.keyName
-  instance_type   = var.instanceType 
-  
-  # Create and attach an ebs volume 
-  # when we create the instance
-  root_block_device {
-    delete_on_termination = true 
-    encrypted             = false 
-    volume_size           = 32
-    volume_type           = "gp2"
-    }
- 
-  # Name the instance
-  tags = {
-    Name = var.instanceName
-  }
-  # Name the volumes; will name all volumes included in the 
-  # ami and the ebs block device from above with this instance.
-  volume_tags = {
-    Name = var.instanceName
-  }
-
-  provisioner "file" {
-    source      = "files/oidc-discovery-provider.conf"
-    destination = "/tmp/oidc-discovery-provider.conf"
-  }
-
-  provisioner "file" {
-    source      = "files/install-spiffe.sh"
-    destination = "/tmp/install-spiffe.sh"
-  }
-
-  # Change permissions on bash script and execute from ubuntu user.
-  provisioner "remote-exec" {
-    inline = [
-      "chmod +x /tmp/install-spiffe.sh",
-      "sudo /tmp/install-spiffe.sh ${var.domainName}",
-    ]
-  }
- 
-  
-  # Login to the machine with ubuntu user with the aws key. keep the pem file in the current directory
-  connection {
-    type        = "ssh"
-    user        = "ubuntu"
-    agent       = false 
-    private_key = "${file("scytale-oidc.pem")}"
-    host        = self.public_ip
-  }
-  
-} 
-
-
-output "instance_ip" {
-  description = "The public ip for ssh access"
-  value       = aws_instance.linux_instance.public_ip
+data "aws_eks_cluster" "example" {
+  name = "${module.aws-eks.eks_cluster_name}"
 }
+
+data "aws_eks_cluster_auth" "example" {
+  name = "${module.aws-eks.eks_cluster_name}"
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.example.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.example.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1alpha1"
+    args        = ["eks", "get-token", "--region", "${module.aws-eks.region}", "--cluster-name", "${module.aws-eks.eks_cluster_name}"]
+    command     = "aws"
+  }
+}
+
+module "acm-certificate" {
+  source = "../spire-eks/acm-certificate"
+  region = "${module.aws-eks.region}"
+  trust_domain = "scytale-oidc-aws-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.aws-eks]
+}
+
+module "spire-server-oidc" {
+  source = "../spire-eks/spire-server-oidc"
+  acm_certificate_arn = "${module.acm-certificate.acm_certificate_arn}"
+  trust_domain = "scytale-oidc-aws-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.aws-eks]
+}
+
+module "spire-agent" {
+  source = "../spire-eks/spire-agent"
+  trust_domain = "scytale-oidc-aws-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.spire-server-oidc]
+}
+
+module "trust-domain" {
+  source = "../spire-eks/trust-domain"
+  acm_certificate_arn = "${module.acm-certificate.acm_certificate_arn}"
+  region = "${module.aws-eks.region}"
+  elb = "${module.spire-server-oidc.spire_oidc_lb}"
+  elbname = "${module.spire-server-oidc.spire_oidc_lbname}"
+  trust_domain = "scytale-oidc-aws-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.spire-server-oidc]
+}
+
+module "oidc-and-s3" {
+  source = "./modules/oidc-and-s3"
+  region = "${module.aws-eks.region}"
+  trust_domain = "scytale-oidc-aws-tf.spire-test.com"
+  depends_on = [module.trust-domain]
+}
+
+module "test-s3-access" {
+  source = "./modules/test-s3-access"
+  oidc_provider_arn = "${module.oidc-and-s3.oidc_provider_arn}"
+  oidc_role_arn = "${module.oidc-and-s3.oidc_role_arn}"
+  s3_bucket_name = "${module.oidc-and-s3.s3_bucket_name}"
+  trust_domain = "scytale-oidc-aws-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.oidc-and-s3]
+}
+

@@ -10,9 +10,10 @@
         "Condition": {
           "StringEquals": {
             "${OIDC_URL}:aud": "mys3",
-            "${OIDC_URL}:sub": "spiffe://${OIDC_URL}/myworkload"
+            "${OIDC_URL}:sub": "spiffe://${OIDC_URL}/ns/spire-oidc/sa/default"
           }
         }
       }
     ]
   }
+
