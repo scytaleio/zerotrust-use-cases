@@ -1,83 +1,75 @@
-#create a Linux instance in AWS
-#set below env variables before terraform plan & apply
-#export AWS_ACCESS_KEY_ID="anaccesskey"
-#export AWS_SECRET_ACCESS_KEY="asecretkey"
+module "aws-eks" {
+  kubeconfig_path = "/tmp"
+  source = "../spire-eks/aws-eks/basic"
+}
+
 provider "aws" {
-        region     = var.region
+  region = "${module.aws-eks.region}"
 }
 
-# create an instance
-resource "aws_instance" "linux_instance" {
-  ami             = lookup(var.amis, var.region) 
-  subnet_id       = var.subnet 
-  security_groups = var.securityGroups 
-  key_name        = var.keyName
-  instance_type   = var.instanceType 
-  
-  # Create and attach an ebs volume 
-  # when we create the instance
-  root_block_device {
-    delete_on_termination = true 
-    encrypted             = false 
-    volume_size           = 32
-    volume_type           = "gp2"
-    }
- 
-  # Name the instance
-  tags = {
-    Name = var.instanceName
-  }
-  # Name the volumes; will name all volumes included in the 
-  # ami and the ebs block device from above with this instance.
-  volume_tags = {
-    Name = var.instanceName
-  }
-
-  provisioner "file" {
-    source      = "files/oidc-discovery-provider.conf"
-    destination = "/tmp/oidc-discovery-provider.conf"
-  }
-
-  provisioner "file" {
-    source      = "files/install-spire-server.sh"
-    destination = "/tmp/install-spire-server.sh"
-  }
-
-  provisioner "file" {
-    source      = "files/install-vault.sh"
-    destination = "/tmp/install-vault.sh"
-  }
-
-  provisioner "file" {
-    source      = "files/setup-vault.sh"
-    destination = "/tmp/setup-vault.sh"
-  }
-
-  # Change permissions on bash script and execute from ubuntu user.
-  provisioner "remote-exec" {
-    inline = [
-      "chmod +x /tmp/install-vault.sh",
-      "chmod +x /tmp/install-spire-server.sh",
-      "chmod +x /tmp/setup-vault.sh",
-      "sudo /tmp/install-vault.sh",
-      "sudo /tmp/install-spire-server.sh ${var.domainName}" ,
-    ]
-  }
- 
-  
-  # Login to the machine with ubuntu user with the aws key. keep the pem file in the current directory
-  connection {
-    type        = "ssh"
-    user        = "ubuntu"
-    agent       = false 
-    private_key = "${file("scytale-oidc.pem")}"
-    host        = self.public_ip
-  }
-  
-} 
-
-
-output "instance_ip" {
-  description = "The public ip for ssh access"
-  value       = aws_instance.linux_instance.public_ip
+data "aws_eks_cluster" "example" {
+  name = "${module.aws-eks.eks_cluster_name}"
 }
+
+data "aws_eks_cluster_auth" "example" {
+  name = "${module.aws-eks.eks_cluster_name}"
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.example.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.example.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1alpha1"
+    args        = ["eks", "get-token", "--region", "${module.aws-eks.region}", "--cluster-name", "${module.aws-eks.eks_cluster_name}"]
+    command     = "aws"
+  }
+}
+
+module "acm-certificate7" {
+  source = "../spire-eks/acm-certificate"
+  region = "${module.aws-eks.region}"
+  trust_domain = "scytale-oidc-vault-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.aws-eks]
+}
+
+module "spire-server-oidc7" {
+  source = "../spire-eks/spire-server-oidc"
+  acm_certificate_arn = "${module.acm-certificate7.acm_certificate_arn}"
+  trust_domain = "scytale-oidc-vault-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.acm-certificate7]
+}
+
+module "spire-agent7" {
+  source = "../spire-eks/spire-agent"
+  trust_domain = "scytale-oidc-vault-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.spire-server-oidc7]
+}
+
+module "trust-domain7" {
+  source = "../spire-eks/trust-domain"
+  acm_certificate_arn = "${module.acm-certificate7.acm_certificate_arn}"
+  region = "${module.aws-eks.region}"
+  elb = "${module.spire-server-oidc7.spire_oidc_lb}"
+  elbname = "${module.spire-server-oidc7.spire_oidc_lbname}"
+  trust_domain = "scytale-oidc-vault-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.spire-server-oidc7]
+}
+
+module "vault-setup7" {
+  source = "./modules/vault-setup"
+  trust_domain = "scytale-oidc-vault-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.spire-agent7]
+}
+
+module "vault-configure7" {
+  source = "./modules/vault-configure"
+  trust_domain = "scytale-oidc-vault-tf.spire-test.com"
+  kubeconfig = "${module.aws-eks.kubeconfig_path}/${module.aws-eks.eks_cluster_name}"
+  depends_on = [module.trust-domain7,module.vault-setup7]
+}
+
