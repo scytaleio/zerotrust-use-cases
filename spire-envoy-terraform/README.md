@@ -31,22 +31,25 @@ As shown in the HTTP Arch diagram, the frontend service connect to the backend s
 
 ## Deployment Prerequisites
 
-1. Get AWS Security Keys.
+1. Get & Set AWS Security Keys to access AWS Services API endpoints, like below.
+
+        export AWS_ACCESS_KEY_ID="<AccessKey>"
+        export AWS_SECRET_ACCESS_KEY="<SecretKey>"
 
 ## Deployment Steps
 Execute the following commands to deploy your Kubernetes cluster to EKS & deploy applications.
 
 1. Clone this repository to your machine by running `git clone https://github.com/scytaleio/zerotrust-use-cases.git`.
 1. Change work directory to zerotrust-use-cases/spire-envoy-terraform
-1. Set AWS Security Keys
+1. Make sure you have set AWS Security Keys
 1. (Optional) Set kubeconfig_path variable in main.tf under aws-eks module, defaults to ~/.kube
-1. (Optional) Set waittime_for_cluster variable in main.tf under aws-eks module, defaults to 900secs. Waits time for kubernetes nodes to be in Ready state.
+1. (Optional) Set waittime_for_cluster variable in main.tf under aws-eks module, defaults to 900secs. Wait time for kubernetes nodes to be in Ready state.
 1. (Optional) Set kubeconfig variable in main.tf under spire-agent, workloads-tcp, workloads-http modules, defaults to ~/.kube/config.
 1. (Optional) Set trust_domain variable in main.tf under spire-server, spire-agent, workloads-tcp, workloads-http modules, defaults to envoy.spire-test.com.
 1. Run **terraform init**
 1. Run **terraform plan**
 1. Run **terraform apply**
-1. If deployment is not successful please do troubleshoot the issues before proceeding further.
+1. If deployment is not successful please do troubleshoot the issues before proceeding further. Refer to Trubleshooting steps
 
 ## Validation
 Execute the following commands to validate the deployment.
@@ -71,6 +74,20 @@ This usecase is tested successfully using below mentioned releases of individual
 | Mongo Server | latest |
 | Mongo Client | latest |
 | Frontend (nginx) | latest |
+
+## Troubleshoot
+1. If you experience below mentioned error, please set **KUBECONFIG** environment variable and rerun **terrform apply**
+
+        module.aws-eks.null_resource.aws_eks_kubeconfig (local-exec): Added new context arn:aws:eks:us-east-2:529024819027:cluster/spire-eks-48lqlDPV to /tmp/spire-eks-48lqlDPV
+        module.aws-eks.null_resource.aws_eks_kubeconfig: Creation complete after 0s [id=2004234058031813821]
+        ╷
+        │ Error: Post "http://localhost/api/v1/namespaces/kube-system/configmaps": dial tcp 127.0.0.1:80: connect: connection refused
+        │ 
+        │   with module.aws-eks.module.eks.kubernetes_config_map.aws_auth[0],
+        │   on ../spire-eks/aws-eks/aws_auth.tf line 63, in resource "kubernetes_config_map" "aws_auth":
+        │   63: resource "kubernetes_config_map" "aws_auth" {
+        │ 
+        ╵
 
 ## Cleanup
 Execute the following steps from your workspace to delete your Kubernetes cluster and associated resources from EKS.
