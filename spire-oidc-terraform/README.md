@@ -1,106 +1,91 @@
-# Architecture Diagram
+# spire_oidc_aws
+This is a demo of using SPIRE and OIDC to authenticate workloads on Kubernetes to AWS S3
+This usecase creates EKS cluster, S3 bucket, OIDC-Provider, IAM roles & policies in AWS using terraform.
 
-  
+# Diagram
+![OIDC AWS Authentication Arch Diagram](/spire-oidc-terraform/images/spire-oidc-aws-arch.png "OIDC AWS Authentication Architecture diagram").
 
-# Execution Steps:
+## Introduction
+This Terraform configuration deploys a Kubernetes cluster into AWS's managed Kubernetes service, EKS.
 
-## 1. Clone the repository
+It uses the aws & kubernetes providers to create an entire Kubernetes cluster in EKS including required VMs, networks, and other constructs. Note that this creates an EKS service which only includes the agent node VMs onto which customers deploy their containerized applications.
 
-        git clone https://github.com/Kathiresan1201/spire-oidc.git
+This tutorial demonstrate how a SPIRE identified workload can authenticate to Amazon AWS APIs, assume an AWS IAM role, and retrieve data from an AWS S3 bucket
 
-## 2. Setup the Environment variables
+To illustrate data retrieval from AWS S3 bucket, we created a simple scenario with client application pod. We will create SPIFFE registration entry for client application workload, then fetch jwt token. And then We will try to access file in s3 bucket using jwt token.
 
-        Setup the below environment variables to access AWS Services API endpoints
-    
-        * export AWS_ACCESS_KEY_ID="accesskey"
-        * export AWS_SECRET_ACCESS_KEY="secretkey"
+As shown in the Arch diagram, AWS CLI try to access AWS S3 bucket from client application pod using SPIRE authentication without configuring AWS IAM credentials.
 
+## Deployment flow
 
-## 3. Download a key-pair from AWS console and store it locally
-        * Goto AWS console 
-        * Search to EC2 
-        * Click on Key Pairs under Network and Security
-        * Click on Create Key Pair from top right corner
-        * Give a name for the key pair and download it
-        * Move the .pem or .ppk file to spire-oidc directory(This example uses scytale-oidc.pem file)
+1. Creates EKS cluster
+2. Creates spire namespace
+3. Deploy's Spire-Server along side OIDC provider application & Spire-Agent in spire namespace
+4. Spire-node registration entry creation
+5. Spire-agent registration entry creation
+7. Create the required DNS A record to point to the OIDC Discovery document endpoint
+8. Create a sample AWS identity provider, policy, role, and S3 bucket
+9. Test access to the S3 bucket
 
-## 4. Update variables.json file 
+## Deployment Prerequisites
 
-           Variable                |  Default value         | Notes
-    -------------------------------|------------------------|------------------------------------------
-    Region                         | us-west-1              |
-    Availability Zone              | us-west-1a             |
-    instanceType                   | t2.small               |
-    subnet                         | subnet-0a64c86d        | default subnet available in VPC
-    SecurityGroup                  | sg-dfd58db9            | default SG available in VPC(ports 443 should be accessible from public since ELB associated with it)
-    domainName                     | oidc.spire-test.com    |
-    dnsZone                        | spire-test.com         | point to DNSzone available in AWS account
-    keyName                        | scytale-oidc           | update with name of the pem file downloaded in step 3
-    keyPath                        | scytale-oidc.pem       | update the path in whcih pem file is kept(default is set to spire-oidc directory)
-    amis                           | ami-0121ef35996ede438  | update the AMI available based on the region selected,default value is for ubuntu 16.04
-    
-    
-## 5. Execute the script
-      
-      run the below command to validate the changes
-         
-         terraform plan
-         
-       output will look something like this
-         
-        # time_sleep.wait_90_seconds will be created
-        + resource "time_sleep" "wait_90_seconds" {
-          + create_duration = "90s"
-          + id              = (known after apply)
-          }
+1. Get & Set AWS Security Keys to access AWS Services API endpoints, like below.
 
-    Plan: 13 to add, 0 to change, 0 to destroy.
-      
-      Once plan is verified run the below command to create aws resoures
-      
-          terraform apply --auto-approve
-       
-      wait for about 15-20 mins for the execution to complete
-      
-      Output will look something like this
-      
-          Apply complete! Resources: 13 added, 0 changed, 0 destroyed.
+        export AWS_ACCESS_KEY_ID="<AccessKey>"
+        export AWS_SECRET_ACCESS_KEY="<SecretKey>"
 
-          Outputs:
+## Deployment Steps
+Execute the following commands to deploy your Kubernetes cluster to EKS & deploy applications.
 
-          instance_ip = "13.57.57.23"
-      
-   
- ## 6. SSH into the server
- 
-     ssh -i scytale-oidc.pem ubuntu@<IP address of the instance>
+1. Clone this repository to your machine by running `git clone https://github.com/scytaleio/zerotrust-use-cases.git`.
+1. Change work directory to zerotrust-use-cases/spire-oidc-terraform
+1. Make sure you have set AWS Security Keys
+1. (Optional) Set kubeconfig_path variable in main.tf under aws-eks module, defaults to ~/.kube
+1. (Optional) Set waittime_for_cluster variable in main.tf under aws-eks module, defaults to 900secs. Wait time for kubernetes nodes to be in Ready state.
+1. (Optional) Set kubeconfig variable in main.tf under spire-agent, workloads-tcp, workloads-http modules, defaults to ~/.kube/config.
+1. (Optional) Set trust_domain variable in main.tf under spire-server, spire-agent, workloads-tcp, workloads-http modules, defaults to envoy.spire-test.com.
+1. (Required) Set acm_certificate_arn variable in main.tf under spire-server-oidc, trust-domain modules. ARN of acm certificate. By default automatically read from acm-certificate module.
+1. (Required) Set elb variable in main.tf under trust-domain module. An spire oidc-discovery service Loadbalancer FQDN. By default automatically read from spire-server-oidc module.
+1. (Required) Set elbName variable in main.tf under trust-domain module. An spire oidc-discovery service Loadbalancer name. By default automatically read from spire-server-oidc module.
+1. Run **terraform init**
+1. Run **terraform plan**
+1. Run **terraform apply**
+1. If deployment is not successful please do troubleshoot the issues before proceeding further. Refer to Trubleshooting steps
 
+## Verification
+You must following message after you have executed **terraform apply** in deployment steps
 
-## 7.Healthcheck
+        Successfully accessed test.txt file from s3 bucket
 
-    sudo -i
-    spire-server healthcheck -registrationUDSPath /var/run/spire/sockets/server.sock 
-    spire-agent healthcheck -socketPath /var/run/spire/sockets/agent.sock 
+## Component Version Information
+This usecase is tested successfully using below mentioned releases of individual components.
 
-## 8.Workload registration
+| Name | Version |
+|------|-------------|
+| Terraform | 1.0.0 |
+| Docker Container Engine | 19.3.13 |
+| Kubernetes | 1.20.4 |
+| Spire-Server | 0.12.1 |
+| Spire-Agent | 0.12.1 |
 
-     spire-server entry create -spiffeID spiffe://oidc.spire-test.com/myworkload -parentID spiffe://oidc.spire-test.com/myagent -selector unix:uid:0 \
-     -registrationUDSPath /var/run/spire/sockets/server.sock
+## Troubleshoot
+1. If you experience below mentioned error, please set **KUBECONFIG** environment variable and rerun **terrform apply**
 
-## 9.Fetch token
+        module.aws-eks.null_resource.aws_eks_kubeconfig (local-exec): Added new context arn:aws:eks:us-east-2:529024819027:cluster/spire-eks-48lqlDPV to /tmp/spire-eks-48lqlDPV
+        module.aws-eks.null_resource.aws_eks_kubeconfig: Creation complete after 0s [id=2004234058031813821]
+        ╷
+        │ Error: Post "http://localhost/api/v1/namespaces/kube-system/configmaps": dial tcp 127.0.0.1:80: connect: connection refused
+        │ 
+        │   with module.aws-eks.module.eks.kubernetes_config_map.aws_auth[0],
+        │   on ../spire-eks/aws-eks/aws_auth.tf line 63, in resource "kubernetes_config_map" "aws_auth":
+        │   63: resource "kubernetes_config_map" "aws_auth" {
+        │ 
+        ╵
 
-    spire-agent api fetch jwt -audience mys3 -socketPath     /run/spire/sockets/agent.sock | sed '2!d' | sed 's/[[:space:]]//g' > token
+## Cleanup
+Execute the following steps from your workspace to delete your Kubernetes cluster and associated resources from EKS.
 
-## 10.Download file from s3
+1. Change work directory to zerotrust-use-cases/spire-envoy-terraform
+1. Run **terraform state list** to see the state status
+1. Run **terraform destroy** to destroy the resources created
 
-    Fetch the OIDC ROLE ARN from AWS console
-     * Go to IAM
-     * Click on Roles
-     * Search for scytale-oidc (name of the role)
-     * Copy the Role ARN
-
-    AWS_ROLE_ARN=<OIDC-ROLE-ARN> AWS_WEB_IDENTITY_TOKEN_FILE=token aws s3 cp s3://scytale-oidc/scytale_object test.txt
-    
-    
-    
-    
