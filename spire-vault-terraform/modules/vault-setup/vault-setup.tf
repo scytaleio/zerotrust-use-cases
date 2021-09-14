@@ -95,3 +95,57 @@ resource "kubernetes_deployment" "spire_vault" {
   }
 }
 
+resource "kubernetes_deployment" "client" {
+  metadata {
+    name = "client"
+
+    labels = {
+      app = "client"
+    }
+  }
+
+  spec {
+    selector {
+      match_labels = {
+        app = "client"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "client"
+        }
+      }
+
+      spec {
+        volume {
+          name = "spire-agent-socket"
+
+          host_path {
+            path = "/opt/spire/sockets"
+            type = "Directory"
+          }
+        }
+
+        container {
+          name    = "client"
+          image   = "gcr.io/spiffe-io/spire-agent:1.0.0"
+          command = ["sleep"]
+          args    = ["1000000000"]
+
+          volume_mount {
+            name       = "spire-agent-socket"
+            read_only  = true
+            mount_path = "/opt/spire/sockets"
+          }
+        }
+
+        dns_policy   = "ClusterFirstWithHostNet"
+        host_network = true
+        host_pid     = true
+      }
+    }
+  }
+}
+

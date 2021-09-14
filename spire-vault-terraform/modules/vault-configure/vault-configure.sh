@@ -37,7 +37,7 @@ export VAULT_K8S_PODNAME="$(kubectl -n ${VAULT_K8S_NAMESPACE} get pods | grep 's
 # Unseal happens while vault gets initialized
 echo "store secrets"
 
-kubectl -n ${VAULT_K8S_NAMESPACE} exec ${VAULT_K8S_PODNAME} -- sh -c "export VAULT_TOKEN=\$(cat /home/vault/.vault-token) && vault kv put secret/my-super-secret test1=123"
+kubectl -n ${VAULT_K8S_NAMESPACE} exec ${VAULT_K8S_PODNAME} -- sh -c "export VAULT_TOKEN=\$(cat /home/vault/.vault-token) && vault kv put secret/my-super-secret test=123"
 
 echo "enabling JWT on vault"
 kubectl -n ${VAULT_K8S_NAMESPACE} exec ${VAULT_K8S_PODNAME} -- sh -c "export VAULT_TOKEN=\$(cat /home/vault/.vault-token) && vault auth enable jwt"
@@ -59,13 +59,11 @@ kubectl -n ${VAULT_K8S_NAMESPACE} exec ${VAULT_K8S_PODNAME} -- sh -c "export VAU
 echo "generating token for vault"
 sleep 10
 
-spire_agent_pod=`kubectl get pods -n spire|grep spire-agent|awk '{print $1}'|head -1`
-token_temp=$(kubectl exec -n spire ${spire_agent_pod} -- sh -c "/opt/spire/bin/spire-agent api fetch jwt  -audience TESTING  -socketPath /opt/spire/sockets/agent.sock")
+token_temp=$(kubectl exec -n spire-vault deploy/client -- sh -c "/opt/spire/bin/spire-agent api fetch jwt  -audience TESTING  -socketPath /opt/spire/sockets/agent.sock")
 token=$(echo "${token_temp}" |sed '2!d' | sed 's/[[:space:]]//g')
 
-echo Token is $token
 echo "Install curl, jq packages"
-kubectl -n ${VAULT_K8S_NAMESPACE} exec ${VAULT_K8S_PODNAME} -- sh -c "apk add curl jq"
+kubectl -n ${VAULT_K8S_NAMESPACE} exec ${VAULT_K8S_PODNAME} -- sh -c "apk add -q curl jq"
 
 echo "extracting auth token to connect to vault"
 
