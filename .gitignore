@@ -44,3 +44,4 @@ istio-*/
 .vscode
 *.tfstate
 *.tfstate.backup
+.terraform*
