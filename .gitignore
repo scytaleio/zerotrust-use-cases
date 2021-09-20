@@ -45,3 +45,4 @@ istio-*/
 *.tfstate
 *.tfstate.backup
 .terraform*
+kubeconfig_spire-eks*
